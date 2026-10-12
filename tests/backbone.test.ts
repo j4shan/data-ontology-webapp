@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { request } from 'node:http';
 import { GraphClient } from '../server/graph-client.ts';
 import { createGateway } from '../server/gateway.ts';
-import { createWebsiteClient, GraphError, toRecords } from '../sdk/index.ts';
+import { toRecords } from '../shared/tables.ts';
 const snapshot = { version: '5.0', schema_fingerprint: 'test', built_at: '2026-10-11T12:00:00Z', node_count: 3, edge_count: 2, identity_count: 2 };
 async function fixture(t: any, handler?: (input: any, socket: Socket) => void) {
   const directory = await mkdtemp(join(tmpdir(), 'dog-web-'));
@@ -38,17 +38,27 @@ async function fixture(t: any, handler?: (input: any, socket: Socket) => void) {
   t.after(async () => { graph.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); for (const socket of sockets) socket.destroy(); await new Promise<void>(resolve => service.close(() => resolve())); await rm(directory, { recursive: true, force: true }); });
   return { graph, url, requests, socketPath, directory };
 }
-test('SDK health and concurrent calls preserve RPC IDs and params over a fragmented socket stream', async t => {
-  const { url, requests } = await fixture(t); const client = createWebsiteClient(url);
-  assert.equal((await client.health()).snapshot?.node_count, 3);
-  const results = await Promise.all(['guest','sales','store'].map(query => client.graph<any>('graph.search', { query })));
+async function postGraph(url: string, method: string, params: Record<string, unknown>) {
+  return fetch(url + '/api/graph', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method, params }) });
+}
+test('adapter health and concurrent calls preserve RPC IDs and params over a fragmented socket stream', async t => {
+  const { url, requests } = await fixture(t);
+  assert.equal((await (await fetch(url + '/api/health')).json()).snapshot?.node_count, 3);
+  const results = await Promise.all(['guest','sales','store'].map(async query => {
+    const response = await postGraph(url, 'graph.search', { query });
+    assert.equal(response.status, 200);
+    return (await response.json()).result;
+  }));
   assert.deepEqual(results.map(result => result.query), ['guest','sales','store']);
   assert.equal(new Set(requests.map(request => request.id)).size, 4);
   assert.ok(requests.every(request => request.jsonrpc === '2.0' && request.id));
 });
-test('service errors remain typed with code and evidence data', async t => {
-  const { url } = await fixture(t);
-  await assert.rejects(createWebsiteClient(url).graph('graph.get_dataset', { node_id: 'absent' }), error => error instanceof GraphError && error.code === -32004 && (error.data as any).node === 'absent');
+test('graph client and adapter preserve service error code and evidence data', async t => {
+  const { graph, url } = await fixture(t);
+  const expected = { code: -32004, message: 'Dataset not found', data: { node: 'absent' } };
+  assert.deepEqual((await graph.call('graph.get_dataset', { node_id: 'absent' })).error, expected);
+  const response = await postGraph(url, 'graph.get_dataset', { node_id: 'absent' });
+  assert.deepEqual((await response.json()).error, expected);
 });
 test('localhost gateway rejects cross-origin, rebound hosts, unsupported graph operations and malformed params', async t => {
   const { url, requests } = await fixture(t);
@@ -75,7 +85,7 @@ test('malformed and mismatched responses fail instead of being rendered as graph
 });
 test('unavailable graph leaves the website and stage shell accessible', async t => {
   const { graph, url } = await fixture(t); graph.close();
-  const health = await createWebsiteClient(url).health();
+  const health = await (await fetch(url + '/api/health')).json();
   assert.equal(health.website, 'ready'); assert.equal(health.graph, 'unavailable'); assert.equal(health.stages.length, 3);
   const page = await fetch(url); assert.equal(page.status, 200); assert.match(await page.text(), /Website backbone/);
   assert.equal((await fetch(url + '/.env')).status, 404);
@@ -86,8 +96,4 @@ test('table decoding respects header positions, nested fields, lists and unknown
   assert.throws(() => toRecords({ header: ['__proto__.polluted'], rows: [[true]] }), /Unsafe/);
   assert.throws(() => toRecords({ header: ['a','a.b'], rows: [['value','other']] }), /Overlapping/);
   assert.equal(({} as any).polluted, undefined);
-});
-test('SDK disallows remote or credential-bearing endpoints', () => {
-  assert.throws(() => createWebsiteClient('https://example.com'), /localhost/);
-  assert.throws(() => createWebsiteClient('http://user:password@localhost:4310'), /localhost/);
 });

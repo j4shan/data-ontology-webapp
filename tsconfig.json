@@ -21,8 +21,6 @@
   "include": [
     "server",
     "shared",
-    "sdk",
-    "cli",
     "web/src",
     "tests"
   ]

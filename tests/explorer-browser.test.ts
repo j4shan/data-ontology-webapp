@@ -215,7 +215,7 @@ test(
     await page.getByRole('button', { name: 'Fit', exact: true }).click();
     await page.screenshot({ path: '/private/tmp/dog-explorer-mcd.png', fullPage: true });
     await page.getByRole('tab', { name: '02 AKG workbench' }).click();
-    await expect(page.getByText('Coming in Stage 3', { exact: true })).toBeVisible();
+    await expect(page.getByText('Coming soon', { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: '01 Graph explorer' }).click();
     await expect(page.locator('.inspector .kind-pill')).toHaveText('relationship');
     assert.deepEqual(errors, []);

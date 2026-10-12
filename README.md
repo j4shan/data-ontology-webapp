@@ -1,6 +1,6 @@
 # Data Ontology Webapp
 
-Stages 1 and 2 deliver a localhost React and TypeScript website, a read-only adapter to the graph service, and a CLI and SDK for local callers. Function #1, the Graph explorer, now searches a connected catalog and displays bounded dataset neighborhoods with an evidence inspector. Function #2, the AKG workbench, remains planned for Stage 3.
+Stages 1 and 2 deliver a localhost React and TypeScript webapp with a read-only adapter to the graph service. Function #1, the Graph explorer, searches a connected catalog and displays bounded dataset neighborhoods with an evidence inspector. Function #2, the AKG workbench, is labelled **Coming soon**.
 
 ## Start locally
 
@@ -34,33 +34,21 @@ In the Explorer, type a prefix, optionally choose a search category, and select 
 
 For application server development, `npm run dev` builds once and watches the server. After browser source changes, run `npm run build` and refresh the page.
 
-## Check health and read graph data
+## Check the local adapter and graph connection
 
-The CLI calls the same localhost application endpoints as the SDK. Run these from the repository root while the website server is running:
+With the webapp running, check its connection status:
 
 ```sh
-npm run cli -- health
-npm run cli -- graph graph.snapshot_info
-npm run cli -- graph graph.search '{"query":"sales"}'
+curl http://127.0.0.1:4310/api/health
 ```
 
-If you changed the website port, set `DOG_WEBSITE_URL` for CLI calls, for example `DOG_WEBSITE_URL=http://127.0.0.1:4311 npm run cli -- health`. Health reports `website: "ready"` even when `graph` is `"unavailable"`; graph calls need a reachable graph service. The same endpoints are `GET /api/health` and `POST /api/graph` with JSON such as `{"method":"graph.search","params":{"query":"sales"}}`.
+Health reports `website: "ready"` even when `graph` is `"unavailable"`; graph calls need a reachable graph service. The browser uses `GET /api/health` and `POST /api/graph` on this local adapter. For example, its graph request body can be `{"method":"graph.search","params":{"query":"sales"}}`. These HTTP endpoints provide browser transport; external agents should use the graph service's standard JSON-RPC API directly.
 
-TypeScript callers can import the local SDK:
+Browsers cannot open Unix sockets. The browser code in `web/src/api.ts` and `web/src/explorer/client.ts` therefore calls the local HTTP adapter, which uses `server/graph-client.ts` to send JSON-RPC 2.0 requests over the graph-service Unix socket. The adapter allows nine public, read-only graph methods: `graph.snapshot_info`, `graph.search`, `graph.get_identity`, `graph.get_dataset`, `graph.get_relationship`, `graph.get_hops`, `graph.expand_subgraph`, `graph.find_paths`, and `graph.find_connecting_subgraph`. It preserves service errors and tracks connection generations so Explorer can reject evidence from a changed connection. Graph semantics come from the public graph service.
 
-```ts
-import { createWebsiteClient, toRecords } from './sdk/index.ts';
+## Project layout
 
-const client = createWebsiteClient(); // Or pass a localhost URL for a different port.
-const health = await client.health();
-const snapshot = await client.graph('graph.snapshot_info');
-const search = await client.graph('graph.search', { query: 'sales' });
-const records = toRecords({ header: ['node_id'], rows: [['example.dataset']] });
-```
-
-`toRecords` converts graph tables with `header` and `rows` into objects, including nested fields named with dots. It also accepts an existing array of records. The SDK exposes graph service errors as `GraphError` with their code and data.
-
-The adapter allows nine public, read-only graph methods: `graph.snapshot_info`, `graph.search`, `graph.get_identity`, `graph.get_dataset`, `graph.get_relationship`, `graph.get_hops`, `graph.expand_subgraph`, `graph.find_paths`, and `graph.find_connecting_subgraph`. It generates RPC request IDs and serializes calls over a persistent Unix socket. Requests and responses have size limits and timeouts; connection generations change when the connection changes. The website accesses the graph only through its public JSON-RPC API.
+`web/` contains the browser app; `server/` contains the localhost HTTP adapter and graph transport; `shared/` contains protocol and table utilities; `tests/` contains integration and browser checks; and `artifacts/catalogs/` contains the two independent demo snapshots. The repository has no public SDK, separate CLI, or client package export.
 
 The bundled McDonald's and Starbucks snapshots are committed demo assets. Other catalogs, BI questions, graph artifacts, AKG contracts, traces, and run results belong in the configurable Critic project; temporary runtime output remains untracked. The current delivery has no catalog switching control, hosted deployment, agent question run, correctness scoring, or SQL execution.
 

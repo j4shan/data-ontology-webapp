@@ -38,7 +38,7 @@ Recentering keeps the search text and selected result. The URL stores search tex
 
 ## Verification and scope
 
-The delivered run passed 19 functional checks with desktop and portrait browser coverage and a live McDonald's catalog workflow. Strict TypeScript checking and the Vite build also passed. To run the same opt-in checks with a reachable graph service and built browser bundle:
+The delivered run passed 18 functional checks, including seven backbone tests, desktop and portrait browser coverage, and a live McDonald's catalog workflow. Strict TypeScript checking and the production build also passed. To run the same opt-in checks with a reachable graph service and built browser bundle:
 
 ```sh
 npm run build

@@ -1,12 +1,21 @@
-import { GraphError, type GraphMethod, type Health, type Params, type RpcResponse } from '../../shared/protocol.ts';
-export async function health(signal?: AbortSignal): Promise<Health> {
-  const response = await fetch('/api/health', { signal });
-  if (!response.ok) throw new Error('The website connection is unavailable');
-  return response.json();
+import type { Health, CatalogList } from '../../shared/protocol.ts';
+async function read<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, init);
+  const value = await response.json();
+  if (!response.ok) throw new Error(value.message ?? 'The catalog connection is unavailable');
+  return value as T;
 }
-export async function graph<T>(method: GraphMethod, params: Params, signal?: AbortSignal): Promise<T> {
-  const response = await fetch('/api/graph', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method, params }), signal });
-  const value = await response.json() as RpcResponse<T> & { message?: string };
-  if (!response.ok || value.error) throw new GraphError(value.error?.code ?? -32050, value.error?.message ?? value.message ?? 'Graph request failed', value.error?.data);
-  return value.result as T;
+export function health(signal?: AbortSignal) {
+  return read<Health>('/api/health', { signal });
+}
+export function catalogList(signal?: AbortSignal) {
+  return read<CatalogList>('/api/catalogs', { signal });
+}
+export function activateCatalog(catalogId: string, signal?: AbortSignal) {
+  return read<Health>('/api/catalog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ catalog_id: catalogId }),
+    signal,
+  });
 }

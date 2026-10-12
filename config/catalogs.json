@@ -1,0 +1,20 @@
+[
+  {
+    "id": "mcd",
+    "label": "McDonald’s",
+    "snapshotDirectory": "artifacts/catalogs/mcd/current",
+    "initialFocus": {
+      "kind": "dataset",
+      "nodeId": "sf:mcdonalds.restaurant.dim_restaurant"
+    }
+  },
+  {
+    "id": "sbux",
+    "label": "Starbucks",
+    "snapshotDirectory": "artifacts/catalogs/sbux/current",
+    "initialFocus": {
+      "kind": "dataset",
+      "nodeId": "sf:starbucks.demand.fact_transaction"
+    }
+  }
+]

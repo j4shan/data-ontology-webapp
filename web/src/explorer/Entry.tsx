@@ -56,8 +56,8 @@ export default function Explorer({ connection, refresh }: FeatureProps) {
   const changedMessage = useRef('');
   const connected = connection?.graph === 'connected';
   const call = useMemo(
-    () => createGraphCaller(connection?.generation ?? ''),
-    [connection?.generation],
+    () => createGraphCaller(connection?.generation ?? '', connection?.catalog?.id),
+    [connection?.generation, connection?.catalog?.id],
   );
   const key = focus ? focusKey(focus) : '';
   function snapshotChanged(error: Error) {
@@ -80,6 +80,13 @@ export default function Explorer({ connection, refresh }: FeatureProps) {
       changedMessage.current = '';
     }
   }, [connection?.generation]);
+  useEffect(() => {
+    if (connection?.catalog && connected && !readFocus(new URLSearchParams(location.search))) {
+      const initial = connection.catalog.initialFocus;
+      setFocus(initial);
+      setHistory({ items: [initial], index: 0 });
+    }
+  }, [connection?.catalog?.id, connected]);
   useEffect(() => {
     const controller = new AbortController();
     let current = true;
@@ -267,6 +274,7 @@ export default function Explorer({ connection, refresh }: FeatureProps) {
                 {group.hits.map((hit) => (
                   <button
                     key={hit.key}
+                    data-search-key={hit.key}
                     className={`search-result ${selectedSearch === `${hit.kind}:${hit.key}` ? 'is-selected' : ''}`}
                     aria-pressed={selectedSearch === `${hit.kind}:${hit.key}`}
                     aria-label={`Select ${hit.kind.replace('_', ' ')} ${hit.label}`}

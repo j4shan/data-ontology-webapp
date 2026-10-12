@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { createGateway } from '../server/gateway.ts';
 import { GraphClient } from '../server/graph-client.ts';
+import { CatalogManager, readCatalogs } from '../server/catalogs.ts';
 import { once } from 'node:events';
 import {
   ids,
@@ -71,8 +72,7 @@ test(
         assert.equal(params.max_nodes, 50);
         assert.equal('max_edges' in params, false);
         result = subgraph(params.seed_node_ids, params.max_depth);
-      }
-      else if (method === 'graph.get_relationship')
+      } else if (method === 'graph.get_relationship')
         result = {
           ...relationships.find((edge) => edge.edge_id === params.edge_id),
           entity_definitions: [],
@@ -226,6 +226,127 @@ test(
     await expect(page.getByText('Coming soon', { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: '01 Graph explorer' }).click();
     await expect(page.locator('.inspector .kind-pill')).toHaveText('relationship');
+    assert.deepEqual(errors, []);
+  },
+);
+
+test(
+  'live catalog dropdown refreshes initial graph, scopes search, handles rapid switches and shared tab state',
+  { skip: process.env.DOG_LIVE_GRAPH_TESTS !== '1' },
+  async (t) => {
+    const root = new URL('../', import.meta.url).pathname;
+    const catalogs = new CatalogManager({
+      catalogs: await readCatalogs(root),
+      executable: process.env.DOG_GRAPH_SERVER,
+    });
+    const server = createGateway({
+      graph: catalogs,
+      catalogs,
+      staticDir: new URL('../dist', import.meta.url).pathname,
+      delivered: ['explorer'],
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const url = `http://127.0.0.1:${(server.address() as any).port}`;
+    const browser = await chromium.launch({
+      headless: true,
+      executablePath:
+        process.env.DOG_BROWSER_EXECUTABLE ??
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    });
+    t.after(async () => {
+      await browser.close();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await catalogs.close();
+    });
+    const page = await browser.newPage({
+      viewport: { width: 1440, height: 1100 },
+      reducedMotion: 'reduce',
+    });
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const scopedRequests: { catalog_id: string; method: string }[] = [];
+    page.on('request', (request) => {
+      if (request.url().endsWith('/api/graph')) scopedRequests.push(request.postDataJSON());
+    });
+    await page.goto(url);
+    const selector = page.getByLabel('Data catalog', { exact: true });
+    await expect(selector).toHaveValue('mcd');
+    await expect(selector.locator('option')).toHaveText(['McDonald’s', 'Starbucks']);
+    await expect(page.getByTestId('focus-title')).toHaveText('Restaurant');
+    await expect(page.locator('[data-node-id]').first()).toBeVisible();
+    assert.ok((await page.locator('[data-node-id]').count()) <= 50);
+    await page.getByLabel('Search category').selectOption('dataset');
+    await page.getByLabel('Entity, dataset or column').fill('sales');
+    await expect(page.locator('.search-result').first()).toBeVisible();
+    const stale = await page.locator('.search-result').first().getAttribute('data-search-key');
+    assert.match(stale ?? '', /mcdonalds/);
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let intercepted = false;
+    await page.route('**/api/graph', async (route) => {
+      if (
+        !intercepted &&
+        route.request().postDataJSON().catalog_id === 'mcd' &&
+        route.request().postDataJSON().method === 'graph.search'
+      ) {
+        intercepted = true;
+        const response = await route.fetch();
+        await blocked;
+        try {
+          await route.fulfill({ response });
+        } catch {
+          /* Selection aborted the old request. */
+        }
+      } else await route.continue();
+    });
+    await page.getByLabel('Entity, dataset or column').fill('guest');
+    await expect.poll(() => intercepted).toBe(true);
+    await selector.selectOption('sbux');
+    await expect(page.locator('[data-node-id^="sf:mcdonalds."]')).toHaveCount(0);
+    await expect(page.getByTestId('focus-title')).toHaveText('Transaction');
+    release();
+    await expect(page.getByLabel('Entity, dataset or column')).toHaveValue('guest');
+    await page.getByLabel('Entity, dataset or column').fill('sales');
+    await expect(page.locator('.search-result').first()).toBeVisible();
+    const current = await page.locator('.search-result').first().getAttribute('data-search-key');
+    assert.match(current ?? '', /starbucks/);
+    await expect(page.locator('[data-node-id^="sf:mcdonalds."]')).toHaveCount(0);
+    await page.getByRole('tab', { name: '02 AKG workbench' }).click();
+    await expect(selector).toHaveValue('sbux');
+    await selector.selectOption('mcd');
+    await page.getByRole('tab', { name: '01 Graph explorer' }).click();
+    await expect(page.getByTestId('focus-title')).toHaveText('Restaurant');
+    await selector.selectOption('sbux');
+    await selector.selectOption('mcd');
+    await selector.selectOption('sbux');
+    await expect(page.getByTestId('focus-title')).toHaveText('Transaction');
+    await expect(selector).toHaveValue('sbux');
+    await expect(page.locator('[data-node-id^="sf:mcdonalds."]')).toHaveCount(0);
+    assert.ok(scopedRequests.some((request) => request.catalog_id === 'mcd'));
+    assert.ok(scopedRequests.some((request) => request.catalog_id === 'sbux'));
+    assert.ok(scopedRequests.every((request) => ['mcd', 'sbux'].includes(request.catalog_id)));
+    await expect(page.getByText('AVAILABLE NOW', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Localhost first · Website backbone', { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.locator('.search-result').first()).toBeVisible();
+    assert.match(
+      (await page.locator('.search-result').first().getAttribute('data-search-key')) ?? '',
+      /starbucks/,
+    );
+    await page.screenshot({ path: '/private/tmp/dog-catalog-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await selector.focus();
+    await expect(selector).toBeFocused();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    await page.screenshot({ path: '/private/tmp/dog-catalog-portrait.png', fullPage: true });
+    await page.reload();
+    await expect(selector).toHaveValue('sbux');
+    await expect(page.getByTestId('focus-title')).toHaveText('Transaction');
     assert.deepEqual(errors, []);
   },
 );

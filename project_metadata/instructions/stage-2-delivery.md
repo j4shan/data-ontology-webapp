@@ -2,27 +2,19 @@
 
 Stage 2 delivers Function #1, a local Explorer for searching a published graph catalog and inspecting a bounded neighborhood around one selected result. It uses the graph service's public JSON-RPC API through the website's read-only adapter. Function #2, the AKG workbench, remains planned for Stage 3.
 
-## Start the graph and website
+## Start the website
 
-Node.js 22.12 or later is required for the website. Install the `data-ontology-graph-server` executable and make sure it is on `PATH`. From the webapp root, start the installed graph service with a bundled snapshot:
-
-```sh
-data-ontology-graph-server \
-  --snapshot-dir artifacts/catalogs/mcd/current \
-  --socket /tmp/data-ontology-graph.sock
-```
-
-To use Starbucks instead, start the service with `--snapshot-dir artifacts/catalogs/sbux/current`. One service loads the chosen snapshot at startup; choosing another catalog requires starting it with that path. Each snapshot contains `nodes.json`, `edges.json`, and `annotations.json`. These pre-built demo assets are committed to this repository at [artifacts/catalogs on GitHub](https://github.com/j4shan/data-ontology-webapp/tree/main/artifacts/catalogs). Loading them needs no YAML source or sibling repository.
-
-Keep the graph service running. In another terminal, from the webapp root:
+Node.js 22.12 or later is required for the website. Install the `data-ontology-graph-server` executable and make sure it is on `PATH`. If needed, set `DOG_GRAPH_SERVER=/path/to/bin/data-ontology-graph-server` when starting the webapp. From the webapp root:
 
 ```sh
 npm install
 npm run build
-DOG_SOCKET="${DOG_SOCKET:-/tmp/data-ontology-graph.sock}" npm start
+npm start
 ```
 
-Use the same `DOG_SOCKET` value in both terminals if you change the default. Visit `http://127.0.0.1:4310` and open **Graph explorer**. `DOG_WEBSITE_PORT` changes the website port; the website remains bound to `127.0.0.1`. The connection strip shows service status. If the service starts after the website, select **Refresh connection**. The website remains available when the graph is unavailable, but Explorer search needs a connected service.
+Visit `http://127.0.0.1:4310` and open **Graph explorer**. `DOG_WEBSITE_PORT` changes the default port of 4310; the website remains bound to `127.0.0.1`. The webapp starts the installed graph service when it activates a catalog and owns one process on a private temporary Unix socket. It stops its process when the catalog changes or the webapp shuts down. The connection strip shows readiness; if activation fails, select **Refresh connection** to retry. The website remains available when the graph is unavailable, but Explorer search needs a connected service.
+
+The shared **Data catalog** dropdown lists McDonald’s and Starbucks in both tabs. McDonald’s is selected by default; a URL with `catalog=sbux` restores Starbucks. Selecting a catalog activates its bundled snapshot and displays a new starting neighborhood: **Restaurant** for McDonald’s or **Transaction** for Starbucks. Selection clears the old catalog’s focus, focus history, and results while retaining typed search text and category. Each snapshot contains independent copies of `nodes.json`, `edges.json`, and `annotations.json` in `artifacts/catalogs/mcd/current` or `artifacts/catalogs/sbux/current`. These pre-built demo assets are committed at [artifacts/catalogs on GitHub](https://github.com/j4shan/data-ontology-webapp/tree/main/artifacts/catalogs). Loading them needs no YAML source or sibling repository; browser requests never rebuild or republish YAML.
 
 The McDonald's snapshot contains 71 datasets, 283 relationships, and 38 identities. The Starbucks snapshot contains 76 datasets, 203 relationships, and 35 identities. Both use snapshot format 5.0 and schema fingerprint `3f0b8c99b8579402`. Each was validated in an isolated graph-service process through the public `graph.snapshot_info` and `graph.search` calls. Temporary runtime output remains untracked.
 
@@ -34,17 +26,17 @@ The McDonald's snapshot contains 71 datasets, 283 relationships, and 38 identiti
 4. Select a dataset or relationship in **Graph** or **List** to recenter. The graph places datasets on deterministic distance rings; fading indicates BFS distance, not confidence. Parallel relationships and self-loops have separate selectable marks. Drag the canvas to pan, drag a dataset to reposition it, use the zoom buttons or pinch to zoom, **Fit** to frame the current layout, and **Arrange** to reset it. Switch to **List** for full object names and relationship values.
 5. Read the **Focus inspector**. Dataset focus shows the qualified name, record grain, entity definitions, their columns, universe and expressions, the dataset's columns, and its accessor. Relationship focus shows each endpoint and its directional multiplicity and match-existence claims, associated entity context, annotations, and unknown fields. These are graph claims; the inspector does not infer SQL behavior. Use **Previous focus**, **Next focus**, or **Clear view** to navigate.
 
-Recentering keeps the search text and selected result. The URL stores search text, category, depth, and focus for reopening a view. Older URLs with a depth above 2 open at depth 2; malformed or negative depths also use the default of 2. Focus history works within the session, and switching tabs retains Explorer state. In-flight search and neighborhood requests are canceled when superseded, and responses from a changed graph connection cannot silently mix with current evidence.
+Recentering keeps the search text and selected result. The URL stores catalog ID, search text, category, depth, and focus for reopening a view. Older URLs with a depth above 2 open at depth 2; malformed or negative depths also use the default of 2. Focus history works within the selected catalog, and switching tabs retains Explorer state. Changing catalogs starts a new focus history and results while keeping the typed search text and category. In-flight search and neighborhood requests are canceled when superseded; browser graph requests carry `catalog_id`, the server refuses calls for a different selected catalog, and connection generations keep stale evidence out of the current view.
 
 ## Verification and scope
 
-The delivered run passed 19 functional checks, including seven backbone tests, desktop and portrait browser coverage, and a live McDonald's catalog workflow. Desktop and portrait screenshots were inspected. Strict TypeScript checking and the production build also passed. To run the same opt-in checks with a reachable graph service and built browser bundle:
+The delivered run passed 23 checks, including owned-process cleanup, missing executable and wrong-catalog errors, delayed old results, rapid selection, URL reload, shared tab selection, desktop and portrait layouts, and a live McDonald’s workflow. `npm run build` passed TypeScript checking and production bundling. Actual `server/main.ts` startup, both snapshot counts, and graceful shutdown also passed on a separate local port. To run the same opt-in checks, configure an installed graph executable and a separate live service socket for the existing legacy browser test:
 
 ```sh
 npm run build
-DOG_BROWSER_TESTS=1 DOG_LIVE_GRAPH_TESTS=1 npm test
+DOG_GRAPH_SERVER=/path/to/bin/data-ontology-graph-server DOG_BROWSER_TESTS=1 DOG_LIVE_GRAPH_TESTS=1 npm test
 ```
 
-Plain `npm test` skips the opt-in browser and live graph checks. The browser tests use local Google Chrome by default; set `DOG_BROWSER_EXECUTABLE` to another browser executable path if needed. The live test uses `DOG_SOCKET`, defaulting to `/tmp/data-ontology-graph.sock`.
+Plain `npm test` skips the opt-in browser and live graph checks. The browser tests use local Google Chrome by default; set `DOG_BROWSER_EXECUTABLE` to another browser executable path if needed. The catalog dropdown browser test uses `DOG_GRAPH_SERVER` or the executable on `PATH`. The existing optional live McDonald’s browser test still uses `DOG_SOCKET`, defaulting to `/tmp/data-ontology-graph.sock`, and requires a separately running service on that socket. Production webapp startup does not use `DOG_SOCKET`.
 
-This stage delivers local graph exploration only. Catalog switching in the website, hosted deployment, agent question runs, correctness scoring, and SQL execution are outside its scope. The committed McDonald's and Starbucks demo snapshots belong to this webapp; other catalogs, graph artifacts, BI question assets, AKG contracts, traces, and run results remain in the configurable Critic project.
+This stage delivers local graph exploration and catalog switching. Hosted deployment, agent question runs, correctness scoring, and SQL execution remain outside its scope. The committed McDonald’s and Starbucks demo snapshots belong to this webapp; other catalogs, graph artifacts, BI question assets, AKG contracts, traces, and run results remain in the configurable Critic project.

@@ -4,18 +4,17 @@ Stage 2 delivers Function #1, a local Explorer for searching a published graph c
 
 ## Start the graph and website
 
-Node.js 22.12 or later is required for the website. The actor graph service must be installed or runnable from its project directory. Set the actor and Critic locations for your workspace; these defaults assume sibling repositories. The published McDonald's artifact is already under Critic, so starting it does not require republishing.
+Node.js 22.12 or later is required for the website. Install the `data-ontology-graph-server` executable and make sure it is on `PATH`. From the webapp root, start the installed graph service with a bundled snapshot:
 
 ```sh
-ACTOR_DIR="${ACTOR_DIR:-../data-ontology-graph}"
-CRITIC_DIR="${CRITIC_DIR:-../data-ontology-agent-critic}"
-ARTIFACT_DIR="$CRITIC_DIR/artifacts/website/mcd/current"
-DOG_SOCKET="${DOG_SOCKET:-/tmp/data-ontology-graph.sock}"
-uv run --project "$ACTOR_DIR" data-ontology-graph-server \
-  --snapshot-dir "$ARTIFACT_DIR" --socket "$DOG_SOCKET"
+data-ontology-graph-server \
+  --snapshot-dir artifacts/catalogs/mcd/current \
+  --socket /tmp/data-ontology-graph.sock
 ```
 
-Keep that command running. In another terminal, from this website repository:
+To use Starbucks instead, start the service with `--snapshot-dir artifacts/catalogs/sbux/current`. One service loads the chosen snapshot at startup; choosing another catalog requires starting it with that path. Each snapshot contains `nodes.json`, `edges.json`, and `annotations.json`. These pre-built demo assets are committed to this repository at [artifacts/catalogs on GitHub](https://github.com/j4shan/data-ontology-webapp/tree/main/artifacts/catalogs). Loading them needs no YAML source or sibling repository.
+
+Keep the graph service running. In another terminal, from the webapp root:
 
 ```sh
 npm install
@@ -25,16 +24,7 @@ DOG_SOCKET="${DOG_SOCKET:-/tmp/data-ontology-graph.sock}" npm start
 
 Use the same `DOG_SOCKET` value in both terminals if you change the default. Visit `http://127.0.0.1:4310` and open **Graph explorer**. `DOG_WEBSITE_PORT` changes the website port; the website remains bound to `127.0.0.1`. The connection strip shows service status. If the service starts after the website, select **Refresh connection**. The website remains available when the graph is unavailable, but Explorer search needs a connected service.
 
-The existing authored warehouse YAML can be republished with the actor's public CLI when a new snapshot is needed. Set `ACTOR_DIR` and `CRITIC_DIR` as above, then run:
-
-```sh
-YAML_DIR="$CRITIC_DIR/project_metadata/earnings_call_candidates/restaurants/mcd/warehouse/yaml"
-ARTIFACT_DIR="$CRITIC_DIR/artifacts/website/mcd/current"
-uv run --project "$ACTOR_DIR" data-ontology-graph-publish \
-  --yaml-dir "$YAML_DIR" --artifact-dir "$ARTIFACT_DIR"
-```
-
-The actor validates the authored YAML during publication. The delivered artifact contains 71 datasets, 283 relationships, and 38 identities. No generated catalog was created or changed. Restart the graph service after republishing so it loads the new snapshot. Keep published artifacts and other runtime output in Critic, not this repository.
+The McDonald's snapshot contains 71 datasets, 283 relationships, and 38 identities. The Starbucks snapshot contains 76 datasets, 203 relationships, and 35 identities. Both use snapshot format 5.0 and schema fingerprint `3f0b8c99b8579402`. Each was validated in an isolated graph-service process through the public `graph.snapshot_info` and `graph.search` calls. Temporary runtime output remains untracked.
 
 ## Explore a neighborhood
 
@@ -57,4 +47,4 @@ DOG_BROWSER_TESTS=1 DOG_LIVE_GRAPH_TESTS=1 npm test
 
 Plain `npm test` skips the opt-in browser and live graph checks. The browser tests use local Google Chrome by default; set `DOG_BROWSER_EXECUTABLE` to another browser executable path if needed. The live test uses `DOG_SOCKET`, defaulting to `/tmp/data-ontology-graph.sock`.
 
-This stage delivers local graph exploration only. Hosted deployment, agent question runs, correctness scoring, and SQL execution are outside its scope. Catalogs, graph artifacts, BI question assets, AKG contracts, traces, and run results remain in the configurable Critic project.
+This stage delivers local graph exploration only. Catalog switching in the website, hosted deployment, agent question runs, correctness scoring, and SQL execution are outside its scope. The committed McDonald's and Starbucks demo snapshots belong to this webapp; other catalogs, graph artifacts, BI question assets, AKG contracts, traces, and run results remain in the configurable Critic project.

@@ -4,10 +4,19 @@ Stages 1 and 2 deliver a localhost React and TypeScript website, a read-only ada
 
 ## Start locally
 
-Use Node.js 22.12 or later. From the website repository:
+Use Node.js 22.12 or later. Install the `data-ontology-graph-server` executable and make sure it is on `PATH`. This graph service is a separate runtime dependency. From the webapp root, start it with one of the bundled, pre-built snapshots:
 
 ```sh
-cd /Users/michaelsj/Documents/Workspace/data-ontology-webapp
+data-ontology-graph-server \
+  --snapshot-dir artifacts/catalogs/mcd/current \
+  --socket /tmp/data-ontology-graph.sock
+```
+
+For the Starbucks demo, use `artifacts/catalogs/sbux/current` as the snapshot directory instead. Start the graph service with the desired path each time you choose a catalog. Each directory contains `nodes.json`, `edges.json`, and `annotations.json`; no YAML source or sibling project is needed to load them. Both snapshots are committed to this repository at [artifacts/catalogs on GitHub](https://github.com/j4shan/data-ontology-webapp/tree/main/artifacts/catalogs).
+
+Keep the graph service running. In another terminal, from the webapp root:
+
+```sh
 npm install
 npm run build
 npm start
@@ -19,7 +28,7 @@ Open `http://127.0.0.1:4310` and select **Graph explorer**. The server binds onl
 DOG_SOCKET=/path/to/existing/graph.sock DOG_WEBSITE_PORT=4310 npm start
 ```
 
-The default graph socket is `/tmp/data-ontology-graph.sock`. The published McDonald's catalog currently used for local verification is under `../data-ontology-agent-critic/artifacts/website/mcd/current`; it contains 71 datasets, 283 relationships, and 38 identities. The graph service currently uses that socket, and the website is running at the URL above. For a new session, start the graph service against the published artifact as described in [Stage 2 delivery](project_metadata/instructions/stage-2-delivery.md), then start the website. The website also starts without a graph connection; use **Refresh connection** when the service becomes available.
+The default graph socket is `/tmp/data-ontology-graph.sock`. The McDonald's snapshot has 71 datasets, 283 relationships, and 38 identities; the Starbucks snapshot has 76 datasets, 203 relationships, and 35 identities. Both use snapshot format 5.0 and schema fingerprint `3f0b8c99b8579402`. Both were validated with isolated graph-service processes through the public `graph.snapshot_info` and `graph.search` methods. The website also starts without a graph connection; use **Refresh connection** when the service becomes available.
 
 In the Explorer, type a prefix, optionally choose a search category, and select a result. The initial neighborhood uses BFS depth 1, a 100 dataset limit, and a 200 relationship limit. Adjust the bounds, select a dataset or relationship to recenter, and use **Graph**, **List**, and the inspector to read the evidence. A partial-neighborhood notice means the displayed graph omitted evidence. See [Stage 2 delivery](project_metadata/instructions/stage-2-delivery.md) for the controls, focus behavior, and graph startup commands.
 
@@ -53,6 +62,6 @@ const records = toRecords({ header: ['node_id'], rows: [['example.dataset']] });
 
 The adapter allows nine public, read-only graph methods: `graph.snapshot_info`, `graph.search`, `graph.get_identity`, `graph.get_dataset`, `graph.get_relationship`, `graph.get_hops`, `graph.expand_subgraph`, `graph.find_paths`, and `graph.find_connecting_subgraph`. It generates RPC request IDs and serializes calls over a persistent Unix socket. Requests and responses have size limits and timeouts; connection generations change when the connection changes. The website accesses the graph only through its public JSON-RPC API.
 
-Catalogs, BI questions, graph artifacts, AKG contracts, traces, and run results belong in the configurable Critic project. This repository contains website and application source only. The current delivery has no hosted deployment, agent question run, correctness scoring, or SQL execution.
+The bundled McDonald's and Starbucks snapshots are committed demo assets. Other catalogs, BI questions, graph artifacts, AKG contracts, traces, and run results belong in the configurable Critic project; temporary runtime output remains untracked. The current delivery has no catalog switching control, hosted deployment, agent question run, correctness scoring, or SQL execution.
 
 See [Stage 1 delivery](project_metadata/instructions/stage-1-delivery.md) for the backbone and [Stage 2 delivery](project_metadata/instructions/stage-2-delivery.md) for Function #1 and its verification.

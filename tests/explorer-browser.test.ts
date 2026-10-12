@@ -66,8 +66,12 @@ test(
         if (params.query === 'slow') await new Promise((resolve) => setTimeout(resolve, 700));
         result = search(params.query);
       } else if (method === 'graph.get_dataset') result = datasetDetail(params.node_id);
-      else if (method === 'graph.expand_subgraph')
+      else if (method === 'graph.expand_subgraph') {
+        assert.ok(params.max_depth <= 2);
+        assert.equal(params.max_nodes, 50);
+        assert.equal('max_edges' in params, false);
         result = subgraph(params.seed_node_ids, params.max_depth);
+      }
       else if (method === 'graph.get_relationship')
         result = {
           ...relationships.find((edge) => edge.edge_id === params.edge_id),
@@ -86,7 +90,11 @@ test(
         json: { jsonrpc: '2.0', id: 'fixture', generation: 'fixture-generation', result },
       });
     });
-    await page.goto(url);
+    await page.goto(url + '?depth=3');
+    await expect(page.getByLabel('BFS depth', { exact: true })).toHaveValue('2');
+    await expect(page.getByLabel('BFS depth', { exact: true }).locator('option')).toHaveCount(3);
+    await expect(page.getByLabel('Dataset limit', { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Relationship limit', { exact: true })).toHaveCount(0);
     await page.getByLabel('Entity, dataset or column').fill('account');
     await page.getByRole('button', { name: 'Select dataset Account', exact: true }).click();
     await expect(page.getByTestId('focus-title')).toHaveText('Account');
@@ -112,7 +120,7 @@ test(
     ).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Previous focus', exact: true }).click();
     await expect(page.getByTestId('focus-title')).toHaveText('fixture:customer');
-    await page.getByLabel('BFS depth', { exact: true }).selectOption('3');
+    await page.getByLabel('BFS depth', { exact: true }).selectOption('2');
     await expect(page.getByText('Partial neighborhood:', { exact: false })).toBeVisible();
     await page.getByRole('button', { name: 'List', exact: true }).click();
     await page.getByRole('button', { name: 'Recenter on dataset Customer', exact: true }).click();
@@ -208,10 +216,10 @@ test(
       .click();
     await expect(page.locator('.inspector .kind-pill')).toHaveText('relationship');
     await expect(page.getByLabel('Entity, dataset or column')).toHaveValue('check');
-    await page.getByLabel('Dataset limit').selectOption('25');
-    await page.getByLabel('BFS depth', { exact: true }).selectOption('3');
-    await expect(page.getByText('Partial neighborhood:', { exact: false })).toBeVisible();
+    await page.getByLabel('BFS depth', { exact: true }).selectOption('2');
     await page.getByRole('button', { name: 'Graph', exact: true }).click();
+    await expect(page.locator('[data-node-id]').first()).toBeVisible();
+    assert.ok((await page.locator('[data-node-id]').count()) <= 50);
     await page.getByRole('button', { name: 'Fit', exact: true }).click();
     await page.screenshot({ path: '/private/tmp/dog-explorer-mcd.png', fullPage: true });
     await page.getByRole('tab', { name: '02 AKG workbench' }).click();

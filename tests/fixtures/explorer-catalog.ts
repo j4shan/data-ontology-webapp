@@ -114,7 +114,7 @@ export function subgraph(seeds: string[], depth: number) {
   const selected = depth === 0 ? datasets.filter((d) => seeds.includes(d.node_id)) : datasets;
   return {
     snapshot,
-    truncated: depth === 3,
+    truncated: depth === 2,
     datasets: selected.map((d) => ({ ...d, distance: seeds.includes(d.node_id) ? 0 : 1 })),
     relationships: depth === 0 ? [] : relationships,
     entity_definitions: [],

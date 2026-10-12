@@ -7,6 +7,7 @@ import {
   focusKey,
   loadNeighborhood,
   readFocus,
+  readBounds,
   type Bounds,
   type Focus,
   type Hit,
@@ -30,12 +31,7 @@ function initialKind(): Kind | 'all' {
     : 'all';
 }
 function initialBounds(): Bounds {
-  const depth = Number(new URLSearchParams(location.search).get('depth') ?? 1);
-  return {
-    depth: Number.isInteger(depth) && depth >= 0 && depth <= 3 ? depth : 1,
-    nodes: 100,
-    edges: 200,
-  };
+  return readBounds(new URLSearchParams(location.search));
 }
 export default function Explorer({ connection, refresh }: FeatureProps) {
   const [query, setQuery] = useState(() => new URLSearchParams(location.search).get('q') ?? '');
@@ -147,7 +143,7 @@ export default function Explorer({ connection, refresh }: FeatureProps) {
         if (!controller.signal.aborted) setViewLoading(false);
       });
     return () => controller.abort();
-  }, [key, bounds.depth, bounds.nodes, bounds.edges, call, connected]);
+  }, [key, bounds.depth, call, connected]);
   useEffect(() => {
     const url = new URL(location.href);
     if (query) url.searchParams.set('q', query);
@@ -340,34 +336,10 @@ export default function Explorer({ connection, refresh }: FeatureProps) {
               value={bounds.depth}
               onChange={(e) => setBounds({ ...bounds, depth: Number(e.target.value) })}
             >
-              {[0, 1, 2, 3].map((depth) => (
+              {[0, 1, 2].map((depth) => (
                 <option key={depth} value={depth}>
                   {depth === 0 ? '0 · focus only' : depth}
                 </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Datasets
-            <select
-              aria-label="Dataset limit"
-              value={bounds.nodes}
-              onChange={(e) => setBounds({ ...bounds, nodes: Number(e.target.value) })}
-            >
-              {[25, 50, 100, 200].map((value) => (
-                <option key={value}>{value}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Relationships
-            <select
-              aria-label="Relationship limit"
-              value={bounds.edges}
-              onChange={(e) => setBounds({ ...bounds, edges: Number(e.target.value) })}
-            >
-              {[50, 100, 200, 500].map((value) => (
-                <option key={value}>{value}</option>
               ))}
             </select>
           </label>
@@ -394,8 +366,8 @@ export default function Explorer({ connection, refresh }: FeatureProps) {
         )}
         {model?.truncated && (
           <div className="partial-banner" role="status">
-            Partial neighborhood: the dataset or relationship limit omitted evidence. Increase a
-            bound or narrow the focus.
+            Partial neighborhood: some connected objects were omitted. Select a nearby dataset to
+            explore another neighborhood.
           </div>
         )}
         {model?.warnings.map((warning) => (

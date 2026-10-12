@@ -6,6 +6,7 @@ import {
   loadNeighborhood,
   emphasis,
   readFocus,
+  readBounds,
   type Call,
   type Hit,
 } from '../web/src/explorer/model.ts';
@@ -19,7 +20,7 @@ import {
   search,
   subgraph,
 } from './fixtures/explorer-catalog.ts';
-const bounds = { depth: 1, nodes: 100, edges: 200 };
+const bounds = { depth: 2 };
 test('search joins match evidence by key while preserving service groups and subject ordering', () => {
   const response = search('account');
   response.groups[0].subject_rows.push([ids.customer, 'Customer', []]);
@@ -92,9 +93,9 @@ test('logical identity seeds every distinct returned realization and surfaces lo
   );
   assert.deepEqual(model.seeds, [ids.account, ids.customer]);
   assert.equal(model.warnings.length, 1);
-  assert.equal(calls[1].params.max_depth, 1);
-  assert.equal(calls[1].params.max_nodes, 100);
-  assert.equal(calls[1].params.max_edges, 200);
+  assert.equal(calls[1].params.max_depth, 2);
+  assert.equal(calls[1].params.max_nodes, 50);
+  assert.equal('max_edges' in calls[1].params, false);
 });
 test('edge focus seeds both endpoints and retains its authoritative edge at depth zero', async () => {
   const edge = relationships[0];
@@ -117,17 +118,15 @@ test('oversized identity focus is rejected before BFS instead of silently droppi
     methods.push(method);
     return {
       name: 'Customer',
-      entity_definitions: [{ node_id: ids.account }, { node_id: ids.customer }],
+      entity_definitions: Array.from({ length: 51 }, (_, i) => ({
+        node_id: `fixture:explorer.overflow-${i}`,
+      })),
       truncated: false,
     } as any;
   };
   await assert.rejects(
-    loadNeighborhood(
-      call,
-      { kind: 'identity', identityId: 'fixture:customer' },
-      { ...bounds, nodes: 1 },
-    ),
-    /2 dataset realizations/,
+    loadNeighborhood(call, { kind: 'identity', identityId: 'fixture:customer' }, bounds),
+    /51 dataset realizations, exceeding the 50-dataset view limit/,
   );
   assert.deepEqual(methods, ['graph.get_identity']);
 });
@@ -194,4 +193,13 @@ test('adapter generation changes reject a response before it becomes graph evide
       { status: 200 },
     );
   await assert.rejects(createGraphCaller('old')('graph.expand_subgraph', {}), SnapshotChanged);
+});
+
+test('depth defaults to two and old or malformed URL bounds cannot exceed two hops', () => {
+  assert.deepEqual(readBounds(new URLSearchParams()), { depth: 2 });
+  assert.deepEqual(readBounds(new URLSearchParams('depth=0')), { depth: 0 });
+  assert.deepEqual(readBounds(new URLSearchParams('depth=1')), { depth: 1 });
+  assert.deepEqual(readBounds(new URLSearchParams('depth=3')), { depth: 2 });
+  assert.deepEqual(readBounds(new URLSearchParams('depth=-1')), { depth: 2 });
+  assert.deepEqual(readBounds(new URLSearchParams('depth=garbage')), { depth: 2 });
 });

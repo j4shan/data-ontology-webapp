@@ -78,10 +78,13 @@ export type Focus =
     }
   | { kind: 'identity'; identityId: string }
   | { kind: 'relationship'; edgeId: string };
+export const MAX_DATASETS = 50;
 export interface Bounds {
   depth: number;
-  nodes: number;
-  edges: number;
+}
+export function readBounds(params: URLSearchParams): Bounds {
+  const depth = Number(params.get('depth') ?? 2);
+  return { depth: Number.isInteger(depth) && depth >= 0 ? Math.min(depth, 2) : 2 };
 }
 export type Call = <T = any>(
   method: GraphMethod,
@@ -178,9 +181,9 @@ export async function loadNeighborhood(
     detail = await call('graph.get_dataset', { node_id: focus.nodeId }, signal);
     seeds = [focus.nodeId];
   }
-  if (seeds.length > bounds.nodes)
+  if (seeds.length > MAX_DATASETS)
     throw new Error(
-      `This identity has ${seeds.length} dataset realizations. Increase the dataset limit or focus on a realization from its result group.`,
+      `This identity has ${seeds.length} dataset realizations, exceeding the ${MAX_DATASETS}-dataset view limit. Select a dataset realization from its result group.`,
     );
   const label =
     focus.kind === 'identity'
@@ -206,9 +209,8 @@ export async function loadNeighborhood(
     'graph.expand_subgraph',
     {
       seed_node_ids: seeds,
-      max_depth: bounds.depth,
-      max_nodes: bounds.nodes,
-      max_edges: bounds.edges,
+      max_depth: Math.min(bounds.depth, 2),
+      max_nodes: MAX_DATASETS,
       response_format: 'records',
     },
     signal,
